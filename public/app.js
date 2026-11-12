@@ -144,7 +144,7 @@ function render() {
   $("#user-chip").innerHTML = S.user ? `${esc(S.perfil?.nome || S.user.email)} · <button class="link" data-act="sair">Sair</button>` : "";
   $("#banner").innerHTML = (emApp && !S.online) ? `<div class="banner">Sem internet. Você pode continuar vendo os pedidos; as mudanças são enviadas quando a conexão voltar.</div>` : "";
 
-  const main = $("#app"), dock = $("#dock");
+  const main = $("#app"), dock = $("#dock");fi
   dock.innerHTML = "";
   if (S.fase === "carregando") main.innerHTML = `<div class="login"><p class="muted">Carregando…</p></div>`;
   else if (S.fase === "login") main.innerHTML = vLogin();
