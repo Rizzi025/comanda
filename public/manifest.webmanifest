@@ -1,0 +1,9 @@
+{
+  "name": "Comanda — pedidos do restaurante",
+  "short_name": "Comanda",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#E9ECEF",
+  "theme_color": "#B3301C",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

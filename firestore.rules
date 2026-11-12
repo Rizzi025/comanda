@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// Regras de segurança do sistema Comanda.
+// Papéis: admin (dono/gerente), garcom, cozinha.
+// Só quem tem um documento em /usuarios/{uid} acessa os dados do restaurante.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function caminhoPerfil() { return /databases/$(database)/documents/usuarios/$(request.auth.uid); }
+    function caminhoInstalacao() { return /databases/$(database)/documents/config/instalacao; }
+    function temPerfil() { return logado() && exists(caminhoPerfil()); }
+    function papel() { return get(caminhoPerfil()).data.papel; }
+    function equipe() { return temPerfil() && papel() in ['admin', 'garcom', 'cozinha']; }
+    function admin() { return temPerfil() && papel() == 'admin'; }
+    function lancaPedido() { return temPerfil() && papel() in ['admin', 'garcom']; }
+
+    // Marca que o sistema já foi instalado (o primeiro administrador já existe).
+    match /config/instalacao {
+      allow read: if true;
+      allow create: if logado()
+        && !exists(caminhoInstalacao())
+        && request.resource.data.keys().hasOnly(['criadoEm'])
+        && getAfter(caminhoPerfil()).data.papel == 'admin';
+      allow update, delete: if false;
+    }
+
+    // Nome do restaurante e número de mesas.
+    match /config/geral {
+      allow read: if equipe();
+      allow write: if admin()
+        && request.resource.data.keys().hasOnly(['nome', 'mesas'])
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 60
+        && request.resource.data.mesas is int && request.resource.data.mesas >= 1 && request.resource.data.mesas <= 200;
+    }
+
+    // Numeração sequencial dos pedidos.
+    match /config/contador {
+      allow read: if equipe();
+      allow write: if lancaPedido()
+        && request.resource.data.keys().hasOnly(['ultimo'])
+        && request.resource.data.ultimo is int
+        && request.resource.data.ultimo >= 1;
+    }
+
+    // Equipe.
+    match /usuarios/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || admin());
+      // O administrador cadastra a equipe; na instalação, a primeira pessoa vira administradora.
+      allow create: if (admin() && request.resource.data.papel in ['admin', 'garcom', 'cozinha'])
+        || (logado() && request.auth.uid == uid
+            && !exists(caminhoInstalacao())
+            && existsAfter(caminhoInstalacao())
+            && request.resource.data.papel == 'admin');
+      allow update: if admin() && request.resource.data.papel in ['admin', 'garcom', 'cozinha'];
+      allow delete: if admin() && uid != request.auth.uid;
+    }
+
+    // Cardápio.
+    match /cardapio/{id} {
+      allow read: if equipe();
+      allow write: if admin();
+    }
+
+    // Pedidos.
+    match /pedidos/{id} {
+      allow read: if equipe();
+      allow create: if lancaPedido()
+        && request.resource.data.status == 'novo'
+        && request.resource.data.mesa is int
+        && request.resource.data.numero is int
+        && request.resource.data.itens is list
+        && request.resource.data.itens.size() > 0
+        && request.resource.data.itens.size() <= 100
+        && request.resource.data.total is number
+        && request.resource.data.garcomUid == request.auth.uid
+        && request.resource.data.criadoEm == request.time;
+      // Qualquer pessoa da equipe muda o status (cozinha prepara, garçom entrega).
+      allow update: if equipe()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm'])
+        && request.resource.data.status in ['novo', 'preparo', 'pronto', 'entregue', 'cancelado']
+        && request.resource.data.atualizadoEm == request.time;
+      allow delete: if admin();
+    }
+  }
+}
